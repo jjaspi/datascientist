@@ -1,0 +1,190 @@
+﻿///$tab Main
+SET ThousandSep=' ';
+SET DecimalSep=',';
+SET MoneyThousandSep=' ';
+SET MoneyDecimalSep=',';
+SET MoneyFormat='# ##0,00 €;-# ##0,00 €';
+SET TimeFormat='h:mm:ss';
+SET DateFormat='D.M.YYYY';
+SET TimestampFormat='D.M.YYYY h:mm:ss[.fff]';
+SET FirstWeekDay=0;
+SET BrokenWeeks=0;
+SET ReferenceDay=4;
+SET FirstMonthOfYear=1;
+SET CollationLocale='fi-FI';
+set LongDayNames= 'Monday;Tuesday;Wednesday;Thursday;Friday;Saturday;Sunday';
+SET MonthNames='tammi;helmi;maalis;huhti;touko;kesä;heinä;elo;syys;loka;marras;joulu';
+SET LongMonthNames='tammikuu;helmikuu;maaliskuu;huhtikuu;toukokuu;kesäkuu;heinäkuu;elokuu;syyskuu;lokakuu;marraskuu;joulukuu';
+
+//Give location for unzipped mails
+let vMailFolder = 'C:\Users\Joonas\Documents\maildir\';
+
+//CSV store folder
+let vCSVFolder = 'C:\Users\Joonas\Documents\';
+ 
+///$tab Mapping
+//Lots of bad data in date fields, this helps little
+
+map_Day:
+mapping load WeekdayName,WeekdayNum
+ inline [
+WeekdayNum, WeekdayName
+0, Sun
+1, Mon
+2, Tue
+3, Wed
+4, Thu
+5, Fri
+6, Sat
+1, Monday
+2, Tuesday
+3, Wednesday
+4, Thursday
+5, Friday
+6, Saturday
+0, Sunday
+];
+///$tab Senders
+sub ScanFolder(Root)
+
+        
+
+                    for each FoundFile in filelist( Root & '\1_' )
+
+                              FileList:
+
+                              Load
+
+                                        '$(FoundFile)'                     as [FilenameWithPath]
+
+                       
+
+                              Autogenerate(1);
+
+                    next FoundFile
+
+  
+
+          for each SubDirectory in dirlist( Root & '\*' )
+
+                    call ScanFolder(SubDirectory)
+
+          next SubDirectory
+
+end sub
+
+ 
+
+ 
+
+Call ScanFolder('$(vMailFolder)') ;
+
+
+
+Senders:
+LOAD Distinct
+SubField(FilenameWithPath,'\',6) as AllSenders
+REsident FileList;
+
+
+
+//Senders:
+//load * inline
+//[AllSenders,
+//allen-p
+//arnold-j];
+///$tab SenderReceiverCount
+set errormode =0; //Looks like not everybody has sent mail, or they are in _sent_mail folder? For this assigments time limit lets just go with sent folder. 
+//Qlik's error handling sucks when it doesnt find a file, so this is way we can actually run the script
+
+let vLoops = FieldValueCount('AllSenders');
+
+for i=1 to $(vLoops)
+
+let vSender = FieldValue('AllSenders',$(i));
+
+
+Temp:
+LOAD 
+'$(vSender)' as SenderID,
+if(left(@1,6)='X-From',right(@1,len(@1)-7)) as SenderName,
+if(left(@1,4)= 'X-To' or left(@1,4)= 'X-cc', right(@1,len(@1)-5),
+if(left(@1,5)= 'X-bcc', right(@1,len(@1)-6))) as Receiver,
+//filename() as Email,
+//@1,
+1 as Counter
+FROM
+[$(vMailFolder)$(vSender)\sent\*_]
+(txt, codepage is 1252, no labels, delimiter is ',', msq)
+where ((left(@1,4)= 'X-To' or left(@1,4)= 'X-cc') and len(right(@1,len(@1)-5)))
+or
+(left(@1,5)= 'X-bcc' and len(right(@1,len(@1)-6)))
+or left(@1,6)='X-From';
+
+Sender:
+mapping load
+SenderID,
+SenderName
+REsident Temp;
+
+Data:
+LOAD
+applymap('Sender',SenderID)  as sender,
+Receiver as recipient,
+sum(Counter) as count
+Resident Temp
+where len(Receiver)
+group by applymap('Sender',SenderID),Receiver;
+
+drop tables Temp;
+
+next 
+
+
+Store Data into $(vCSVFolder)senderrecipientcount.csv (txt);
+
+drop tables Data;
+///$tab exit script
+exit script;
+///$tab Receivedperday
+//Also not everybody has inbox folder... Very bad data.
+
+let vLoops = FieldValueCount('AllSenders');
+
+for i=1 to $(vLoops)
+
+let vSender = FieldValue('AllSenders',$(i));
+
+
+Temp:
+LOAD 
+if(left(@1,4)='Date',
+applymap('map_Day',trim(purgechar(subfield(@1,':',2),chr(9))), null())) as Date, //Dates could use some more cleaning, but this handles most of the cases. There are total trash dates, but some like "July 15" which could be converted
+subfield(FilePath(),'\',6) as employee,
+//filename() as Email,
+//@1,
+1 as Counter
+FROM
+[$(vMailFolder)$(vSender)\inbox\*_]
+(txt, codepage is 1252, no labels, delimiter is ',', msq)
+where left(@1,4)='Date';
+
+Data:
+LOAD
+employee,
+Date as [day of week],
+sum(Counter) as count
+Resident Temp
+where len(Date)
+group by employee,Date;
+
+drop tables Temp;
+
+next 
+
+
+Store Data into $(vCSVFolder)Receivedperday.csv (txt);
+
+drop tables Data;
+
+

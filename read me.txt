@@ -1,0 +1,5 @@
+Instructions
+
+1. Copy&Paste QlikView script .qvs file into QlikView. (Or use Insert script file or function $(Include=file))
+2. Change destination folders, detailed instructions in the script
+3. Reload in Qlikview
