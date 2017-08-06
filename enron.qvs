@@ -20,8 +20,12 @@ SET LongMonthNames='tammikuu;helmikuu;maaliskuu;huhtikuu;toukokuu;kes√§kuu;hein√
 let vMailFolder = 'C:\Users\Joonas\Documents\maildir\';
 
 //CSV store folder
-let vCSVFolder = 'C:\Users\Joonas\Documents\';
+let vCSVFolder = 'C:\Users\Joonas\Documents\Enron\';
  
+
+
+//Version 2:
+//Got rid of error mode=0; & better performance
 ///$tab Mapping
 //Lots of bad data in date fields, this helps little
 
@@ -81,27 +85,18 @@ Call ScanFolder('$(vMailFolder)') ;
 
 
 
-Senders:
+InboxEmployee:
 LOAD Distinct
-SubField(FilenameWithPath,'\',6) as AllSenders
+SubField(FilenameWithPath,'\',6) as AllEmployee,
+if(SubField(FilenameWithPath,'\',7)='sent', SubField(FilenameWithPath,'\',6)) as SentEmployee,
+if(SubField(FilenameWithPath,'\',7)='inbox', SubField(FilenameWithPath,'\',6)) as InboxEmployee
 REsident FileList;
-
-
-
-//Senders:
-//load * inline
-//[AllSenders,
-//allen-p
-//arnold-j];
 ///$tab SenderReceiverCount
-set errormode =0; //Looks like not everybody has sent mail, or they are in _sent_mail folder? For this assigments time limit lets just go with sent folder. 
-//Qlik's error handling sucks when it doesnt find a file, so this is way we can actually run the script
-
-let vLoops = FieldValueCount('AllSenders');
+let vLoops = FieldValueCount('SentEmployee');
 
 for i=1 to $(vLoops)
 
-let vSender = FieldValue('AllSenders',$(i));
+let vSender = FieldValue('SentEmployee',$(i));
 
 
 Temp:
@@ -144,16 +139,14 @@ next
 Store Data into $(vCSVFolder)senderrecipientcount.csv (txt);
 
 drop tables Data;
-///$tab exit script
-exit script;
 ///$tab Receivedperday
 //Also not everybody has inbox folder... Very bad data.
 
-let vLoops = FieldValueCount('AllSenders');
+let vLoops = FieldValueCount('InboxEmployee');
 
 for i=1 to $(vLoops)
 
-let vSender = FieldValue('AllSenders',$(i));
+let vSender = FieldValue('InboxEmployee',$(i));
 
 
 Temp:
@@ -188,3 +181,5 @@ Store Data into $(vCSVFolder)Receivedperday.csv (txt);
 drop tables Data;
 
 
+///$tab exit script
+exit script;
